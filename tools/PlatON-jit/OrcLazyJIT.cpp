@@ -58,6 +58,7 @@ public:
     }
     std::error_code EC;
     raw_fd_ostream outfile(CacheName, EC, sys::fs::F_None);
+	if (EC) return;
     outfile.write(Obj.getBufferStart(), Obj.getBufferSize());
     outfile.close();
   }
@@ -147,20 +148,20 @@ OrcLazyJIT::TransformFtor OrcLazyJIT::createDebugDumper() {
 
  // case DumpKind::DumpFuncsToStdOut:
     return [](std::shared_ptr<Module> M) {
-      printf("[ ");
+      //printf("[ ");
 
-      for (const auto &F : *M) {
-        if (F.isDeclaration())
-          continue;
+      //for (const auto &F : *M) {
+      //  if (F.isDeclaration())
+      //    continue;
 
-        if (F.hasName()) {
-          std::string Name(F.getName());
-          printf("%s ", Name.c_str());
-        } else
-          printf("<anon> ");
-      }
+      //  if (F.hasName()) {
+      //    std::string Name(F.getName());
+      //    printf("%s ", Name.c_str());
+      //  } else
+      //    printf("<anon> ");
+      //}
 
-      printf("]\n");
+      //printf("]\n");
       return M;
     };
 
