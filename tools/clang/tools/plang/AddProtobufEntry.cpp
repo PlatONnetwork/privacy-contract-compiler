@@ -81,7 +81,7 @@ bool isInterfact(Function &F) {
 
   FunctionType *FT = F.getFunctionType();
 
-  Res &= FT->getNumParams() > (F.hasStructRetAttr() ? 3 : 2);
+  Res &= FT->getNumParams() >= (F.hasStructRetAttr() ? 3 : 2);
 
   Type *RetType =
       F.hasStructRetAttr() ? FT->getParamType(0) : FT->getReturnType();

@@ -51,6 +51,7 @@
 #include "llvm/Transforms/Instrumentation.h"
 #include <cerrno>
 #include <stdio.h>
+#include "jit.h"
 
 #ifdef __CYGWIN__
 #include <cygwin/version.h>
@@ -65,7 +66,7 @@ using namespace llvm;
 extern "C" 
 {
   //init jit module
-  bool PlatON_InitJIT(const std::vector<std::string> &vectPluginName) {
+  JIT_API_EXPORT bool PlatON_InitJIT(const std::vector<std::string> &vectPluginName) {
     std::string Error;
     for (auto Plugin : vectPluginName) {
       if (sys::DynamicLibrary::LoadLibraryPermanently(Plugin.c_str(), &Error)) {
@@ -78,7 +79,7 @@ extern "C"
   }
 
   //Run user func by name, default cache is enable.
-  int PlatON_RunFuncByLazyJIT(const char *pModuleName, const char *pFuncName, 
+  JIT_API_EXPORT int PlatON_RunFuncByLazyJIT(const char *pModuleName, const char *pFuncName,
                               char **pRetBuf, char **argv, unsigned *unit_arg_len) {
   assert(pModuleName && pFuncName);
   printf("Begin to run %s.\n", pFuncName);
@@ -122,7 +123,7 @@ extern "C"
 }
 
   //Clear ir module cache
-  bool PlatON_ClearJITCache(const char *pModuleName) {
+  JIT_API_EXPORT bool PlatON_ClearJITCache(const char *pModuleName) {
     assert(pModuleName);
     std::string strPath = pModuleName;
     std::string::size_type pos = strPath.rfind('/');

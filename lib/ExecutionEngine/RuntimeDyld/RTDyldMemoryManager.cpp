@@ -284,7 +284,41 @@ RTDyldMemoryManager::getSymbolAddressInProcess(const std::string &Name) {
     ++NameStr;
 #endif
 
-  return (uint64_t)sys::DynamicLibrary::SearchForAddressOfSymbol(NameStr);
+  // ------ Begin ------ Added by cyf 2018-12-14 -------
+  // Reason: if window strip the leading '_' off
+#ifdef LLVM_ON_WIN32
+  if (NameStr[0] == '_')
+	  ++NameStr;
+#endif
+  // ------  End  ------ Added by cyf 2018-12-14 -------
+  
+  printf("search symbol %s on self process.\n", NameStr);
+  uint64_t SymAddr = (uint64_t)sys::DynamicLibrary::SearchForAddressOfSymbol(NameStr);
+
+  // ------ Begin ------ Added by cyf 2018-12-25 -------
+  // if we can't find the special symbol, mean the symbol maybe in
+  // vs static lib, we must use vs dy symbol to instead;
+  // Important Note:It may have some problems...
+  // FIXED ME: 
+#ifdef LLVM_ON_WIN32
+  if (!SymAddr) {
+	  const char *RepNameStr = nullptr;
+	  if (!strcmp(NameStr, "??_7type_info@@6B@"))
+		  RepNameStr = "??8type_info@@QBEHABV0@@Z";
+	  if (!strcmp(NameStr, "_imp___CxxThrowException@8"))
+		  RepNameStr = "_CxxThrowException";
+	  if (!strcmp(NameStr, "_imp____std_terminate"))
+		  RepNameStr = "__std_terminate";
+	  if (!strcmp(NameStr, "?_Facet_Register@std@@YAXPAV_Facet_base@1@@Z"))
+		  RepNameStr = "??0_Facet_base@std@@QAE@XZ";
+	  if (RepNameStr)
+		  SymAddr = (uint64_t)sys::DynamicLibrary::SearchForAddressOfSymbol(RepNameStr);
+  }
+#endif
+  // ------  End  ------ Added by cyf 2018-12-25 -------
+
+  printf("the symbol %s address:%llu\n", NameStr, SymAddr);
+  return SymAddr;
 }
 
 void *RTDyldMemoryManager::getPointerToNamedFunction(const std::string &Name,
