@@ -10,12 +10,6 @@
 #include <string>
 #include <vector>
 
-#ifdef LLVM_ON_WIN32
-#define JIT_API_EXPORT __declspec(dllexport)
-#else
-#define JIT_API_EXPORT 
-#endif
-
 
 extern "C"
 {
@@ -24,7 +18,7 @@ extern "C"
     Param:@vectPluginName: plugin full file name(.so);
     Return:true=ok, flase=fail;
     ----------------------------------*/
-	JIT_API_EXPORT bool PlatON_InitJIT(const std::vector<std::string> &vectPluginName);
+	bool PlatON_InitJIT(const std::vector<std::string> &vectPluginName);
     
     /*--------------------------------
     Function:run the specified function by jit
@@ -36,7 +30,7 @@ extern "C"
     Return:pRetBuf data lenght.
     Attention:you will delete the pRetBuf memory when don't need it
     ----------------------------------*/
-	JIT_API_EXPORT int PlatON_RunFuncByLazyJIT(const char *pModuleName, const char *pFuncName,
+	int PlatON_RunFuncByLazyJIT(const char *pModuleName, const char *pFuncName,
 											char **pRetBuf, char **argv, unsigned *unit_arg_len);
 
     /*--------------------------------
@@ -46,6 +40,6 @@ extern "C"
     Attention:you mush call the PlatON_ClearJITCache to clear 
     object cache when the ir module file has be changed
     ----------------------------------*/
-	JIT_API_EXPORT bool PlatON_ClearJITCache(const char *pModuleName);
+	bool PlatON_ClearJITCache(const char *pModuleName);
 }
 
