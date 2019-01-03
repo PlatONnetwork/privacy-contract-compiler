@@ -1,0 +1,6 @@
+LIBRARY mpc-jit
+EXPORTS
+
+PlatON_InitJIT              @1
+PlatON_RunFuncByLazyJIT     @2
+PlatON_ClearJITCache        @3

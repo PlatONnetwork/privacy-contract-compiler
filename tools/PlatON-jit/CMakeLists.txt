@@ -35,6 +35,7 @@ endif( LLVM_USE_INTEL_JITEVENTS )
 add_llvm_library(mpc-jit SHARED
   OrcLazyJIT.cpp
   jit.cpp
+  jit.def
 
   DEPENDS
   intrinsics_gen
