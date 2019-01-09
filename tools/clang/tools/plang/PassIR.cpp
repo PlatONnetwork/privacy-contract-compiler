@@ -40,10 +40,11 @@ void GenCode(llvm::Module &M, vector<Function *> &Interfaces,
   WriteBitcodeToFile(&M, OS, false);
   OS.flush();
 
-  GenJavaCode(bc, Interfaces, PlangOpts.ProtobufJava, PlangOpts.JavaCode,
-              PlangOpts.OutputFilename);
-
   GenMPCC(bc, Interfaces, PlangOpts.MPCC, PlangOpts.Config);
+
+  GenJavaCode(bc, Interfaces, PlangOpts.ProtobufJava, PlangOpts.JavaCode,
+              PlangOpts.InputFilenames[0]);
+
 }
 
 void MPCPass(llvm::Module &M, vector<Function *> &Interfaces) {

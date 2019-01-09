@@ -18,7 +18,5 @@ struct PlangOption {
 
   std::vector<std::string> ProtobufJava;
 
-  bool OutputAssembly;
-
   std::vector<std::string> clangArgs;
 };
