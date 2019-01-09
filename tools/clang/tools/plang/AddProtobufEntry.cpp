@@ -66,6 +66,8 @@ bool isBaseTypeOrProtobufPointer(Type *T) {
 }
 
 bool isIdentName(StringRef Name){
+  if(Name.empty())
+    return false;
   for(char c : Name){
     if(!isalnum(c) && c!='_')
       return false;
