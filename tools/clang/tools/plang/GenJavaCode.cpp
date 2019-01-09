@@ -65,10 +65,10 @@ string TypePrint(Type *T) {
 
 void GenJavaCode(std::string &bc, vector<Function *> &Interfaces,
                  vector<string> protobufJava, string JavaCodeDir,
-                 string OutputFilename) {
+                 string InputFilename) {
 
   IR ir;
-  ir.name = OutputFilename;
+  ir.name = InputFilename;
   ir.hash = getMD5(bc);
   //ir.pb_path = protobufJava[0];
   ir.java_files = protobufJava;

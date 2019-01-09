@@ -41,8 +41,6 @@ enum ID {
   OPT_protobuf_CC,
   OPT_protobuf_Java,
 
-  OPT_S
-
 };
 
 static const OptTable::Info InfoTable[] = {
@@ -86,9 +84,6 @@ static const OptTable::Info InfoTable[] = {
      OPT_protobuf_Java, Option::JoinedOrSeparateClass, 0, 0, OPT_INVALID,
      OPT_INVALID, nullptr, nullptr},
 
-    {prefix_1, "S", "Write output as LLVM assembly", nullptr, OPT_S,
-     Option::FlagClass, 0, 0, OPT_INVALID, OPT_INVALID, nullptr, nullptr},
-
 };
 
 class PlangOptTable : public OptTable {
@@ -100,16 +95,6 @@ std::unique_ptr<OptTable> createPlangOptTable() {
   return llvm::make_unique<PlangOptTable>();
 }
 
-string DefaultOutput(vector<string> &inputs, bool OutputAssembly) {
-
-  string suffix = OutputAssembly ? ".ll" : ".bc";
-  if (inputs.size() == 1)
-    return inputs[0] + suffix;
-  else {
-    hash_code code = hash_combine_range(inputs.begin(), inputs.end());
-    return to_string(code) + suffix;
-  }
-}
 
 bool ParseArgs(int argc, char *argv[], PlangOption &PlangOpts) {
 
@@ -122,7 +107,6 @@ bool ParseArgs(int argc, char *argv[], PlangOption &PlangOpts) {
                                            MissingArgIndex, MissingArgCount);
 
   PlangOpts.Help = false;
-  PlangOpts.OutputAssembly = false;
 
   vector<const char *> clangArgv;
 
@@ -149,9 +133,6 @@ bool ParseArgs(int argc, char *argv[], PlangOption &PlangOpts) {
     else if (Option.matches(OPT_protobuf_Java))
       PlangOpts.ProtobufJava.push_back(A->getValue());
 
-    else if (Option.matches(OPT_S))
-      PlangOpts.OutputAssembly = true;
-
     else
       clangArgv.push_back(A->getSpelling().data());
   }
@@ -167,7 +148,6 @@ bool ParseArgs(int argc, char *argv[], PlangOption &PlangOpts) {
     else if (Option.matches(clang::driver::options::OPT_help) ||
              Option.matches(clang::driver::options::OPT_config) ||
              Option.matches(clang::driver::options::OPT_o) ||
-             Option.matches(clang::driver::options::OPT_S) ||
              Option.matches(clang::driver::options::OPT_g_Flag) ||
              Option.matches(clang::driver::options::OPT_UNKNOWN))
       continue;
@@ -185,10 +165,6 @@ bool ParseArgs(int argc, char *argv[], PlangOption &PlangOpts) {
                     0, 0, false);
     return false;
   }
-
-  if (PlangOpts.OutputFilename.empty())
-    PlangOpts.OutputFilename =
-        DefaultOutput(PlangOpts.InputFilenames, PlangOpts.OutputAssembly);
 
   if (PlangOpts.MPCC.length() == 0)
     PlangOpts.MPCC = "mpcc.cpp";

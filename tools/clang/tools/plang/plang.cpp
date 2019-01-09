@@ -136,10 +136,10 @@ public:
   }
 };
 
-void Output(llvm::Module &M, PlangOption &Option) {
+void Output(llvm::Module &M, string OutputFilename) {
 
   std::error_code EC;
-  ToolOutputFile Out(Option.OutputFilename, EC, sys::fs::F_None);
+  ToolOutputFile Out(OutputFilename, EC, sys::fs::F_None);
   if (EC) {
     errs() << EC.message() << '\n';
     return;
@@ -150,10 +150,7 @@ void Output(llvm::Module &M, PlangOption &Option) {
     return;
   }
 
-  if (Option.OutputAssembly || Option.OutputFilename == "-")
-    M.print(Out.os(), nullptr, false);
-  else
-    WriteBitcodeToFile(&M, Out.os(), false);
+  M.print(Out.os(), nullptr, false);
 
   // Declare success.
   Out.keep();
@@ -192,7 +189,8 @@ int main(int argc, char **argv) {
     Link.linkInModule(std::move(Builder.Module));
   }
 
-  Output(MainModule, Option);
+  if(!Option.OutputFilename.empty())
+    Output(MainModule, Option.OutputFilename);
 
   GenCode(MainModule, Interfaces, Option);
 
