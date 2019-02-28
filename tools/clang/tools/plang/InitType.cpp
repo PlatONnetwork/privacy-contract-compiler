@@ -1,4 +1,6 @@
 #include <map>
+#include <set>
+#include<algorithm>
 
 #include "llvm/ADT/Triple.h"
 #include "llvm/IR/Module.h"
@@ -17,50 +19,45 @@ Type *Types[7];
 Constant *ParseFunctions[7];
 Constant *SerialFunctions[7];
 
+set<StructType*> ProtobufStructs;
 map<Type *, Constant *> CtorMap, DtorMap, SizeMap;
 
 StringRef microsoftParseFunctionsName[6] = {
-    "\01?ReadVarBool@mpc@platon@@YAHPBXHAA_N@Z",
-    "\01?ReadVarUint32@mpc@platon@@YAHPBXHAAI@Z",
-    "\01?ReadVarUint64@mpc@platon@@YAHPBXHAA_K@Z",
-    "\01?ReadVarFloat@mpc@platon@@YAHPBXHAAM@Z",
-    "\01?ReadVarDouble@mpc@platon@@YAHPBXHAAN@Z",
-    "\01?ReadVarString@mpc@platon@@YAHPBXHAAV?$basic_string@DU?$char_traits@D@"
-    "std@@V?$allocator@D@2@@std@@@Z"};
+    "ReadVarBool",
+    "ReadVarUint32",
+    "ReadVarUint64",
+    "ReadVarFloat",
+    "ReadVarDouble",
+    "ReadVarString"};
 
 StringRef microsoftSerialFunctionsName[6] = {
-    "\01?WriteVarBool@mpc@platon@@YAHPAXH_N@Z",
-    "\01?WriteVarUint32@mpc@platon@@YAHPAXHI@Z",
-    "\01?WriteVarUint64@mpc@platon@@YAHPAXH_K@Z",
-    "\01?WriteVarFloat@mpc@platon@@YAHPAXHM@Z",
-    "\01?WriteVarDouble@mpc@platon@@YAHPAXHN@Z",
-    "\01?WriteVarString@mpc@platon@@YAHPAXHABV?$basic_string@DU?$char_traits@D@"
-    "std@@V?$allocator@D@2@@std@@@Z"};
+    "WriteVarBool",
+    "WriteVarUint32",
+    "WriteVarUint64",
+    "WriteVarFloat",
+    "WriteVarDouble",
+    "WriteVarString"};
 
 StringRef itaniumParseFunctionsName[6] = {
-    "_ZN6platon3mpc11ReadVarBoolEPKviRb",
-    "_ZN6platon3mpc13ReadVarUint32EPKviRj",
-    "_ZN6platon3mpc13ReadVarUint64EPKviRm",
-    "_ZN6platon3mpc12ReadVarFloatEPKviRf",
-    "_ZN6platon3mpc13ReadVarDoubleEPKviRd",
-    "_ZN6platon3mpc13ReadVarStringEPKviRNSt7__cxx1112basic_stringIcSt11char_"
-    "traitsIcESaIcEEE"};
+    "ReadVarBool",
+    "ReadVarUint32",
+    "ReadVarUint64",
+    "ReadVarFloat",
+    "ReadVarDouble",
+    "ReadVarString"};
 
 StringRef itaniumSerialFunctionsName[6] = {
-    "_ZN6platon3mpc12WriteVarBoolEPvib",
-    "_ZN6platon3mpc14WriteVarUint32EPvij",
-    "_ZN6platon3mpc14WriteVarUint64EPvim",
-    "_ZN6platon3mpc13WriteVarFloatEPvif",
-    "_ZN6platon3mpc14WriteVarDoubleEPvid",
-    "_ZN6platon3mpc14WriteVarStringEPviRKNSt7__cxx1112basic_stringIcSt11char_"
-    "traitsIcESaIcEEE"};
-
-bool isProtobufStruct(Type *);
+    "WriteVarBool",
+    "WriteVarUint32",
+    "WriteVarUint64",
+    "WriteVarFloat",
+    "WriteVarDouble",
+    "WriteVarString"};
 
 Function *getMessageLiteFunction(Module &M, StringRef Name) {
   vector<Type *> ParamsType;
   ParamsType.push_back(
-      PointerType::getUnqual(Types[MESSAGE]->getStructElementType(0)));
+      PointerType::getUnqual(Types[MESSAGE]));
   ParamsType.push_back(i8star);
   ParamsType.push_back(i32);
 
@@ -99,16 +96,33 @@ std::string getMangleName(StringRef className) {
   return result;
 }
 
-StructType *findMessageType(Module &M) {
+std::string getWindowsMangleName(StringRef className) {
+  assert(className.startswith("class.") &&
+         "class name is not startswith 'class.'");
+
+  StringRef name = className.drop_front(6);
+
+  SmallVector<StringRef, 5> parts;
+  name.split(parts, "::");
+
+  std::reverse(parts.begin(), parts.end());
+
+  std::string result;
+
+  for (StringRef part : parts)
+    result = result + part.str() + '@';
+
+  return result;
+}
+
+StructType *findMessageLiteType(Module &M) {
   FunctionType *FT = FunctionType::get(i32, ArrayRef<Type *>(), true);
   PointerType *PPFT = PointerType::getUnqual(PointerType::getUnqual(FT));
 
   for (StructType *ST : M.getIdentifiedStructTypes()) {
-    if (ST->getNumElements() == 1)
-      if (StructType *Lite = dyn_cast<StructType>(ST->getStructElementType(0)))
-        if (Lite->getNumElements() == 1 &&
-            Lite->getStructElementType(0) == PPFT)
-          return ST;
+    if (ST->getNumElements() == 1 &&
+        ST->getStructElementType(0) == PPFT)
+      return ST;
   }
   return nullptr;
 }
@@ -132,55 +146,96 @@ StructType *findStringType(Module &M) {
   return nullptr;
 }
 
-void InitCtorDtorSize(Module &M, bool isWindows) {
-  for (StructType *ST : M.getIdentifiedStructTypes()) {
+bool isProtobufStruct(Type *T) {
+  bool succ = true;
 
-    if (isProtobufStruct(ST)) {
+  succ = succ && T->isStructTy();
+  succ = succ && T->getStructNumElements() > 0;
+  if(!succ)return false;
+  Type* ST0 = T->getStructElementType(0);
+  if(ST0 == Types[MESSAGE])return true;
+
+  succ = succ && ST0->isStructTy();
+  succ = succ && ST0->getStructNumElements() > 0;
+  if(!succ)return false;
+  Type* ST00 = ST0->getStructElementType(0);
+  if(ST00 == Types[MESSAGE])return true;
+
+  return false;
+}
+
+void InitCtorDtorSize(Module &M, bool isWindows, Triple::ArchType Arch){
+  for (StructType *ST : ProtobufStructs){
+
       PointerType *PT = PointerType::getUnqual(ST);
       FunctionType *FT = FunctionType::get(Type::getVoidTy(M.getContext()),
                                            ArrayRef<Type *>(PT), false);
       FunctionType *SizeFT =
           FunctionType::get(i64, ArrayRef<Type *>(PT), false);
 
-      std::string mangle = getMangleName(ST->getName());
 
-      if (isWindows) {
-        CtorMap[PT] = M.getOrInsertFunction("\01??0" + mangle + "@@QAE@XZ", FT);
-        DtorMap[PT] = M.getOrInsertFunction("\01??1" + mangle + "@@UAE@XZ", FT);
-        SizeMap[PT] = M.getOrInsertFunction(
-            "\01?ByteSizeLong@" + mangle + "@@UBEIXZ", SizeFT);
-      } else {
+      if(!isWindows) {
+        std::string mangle = getMangleName(ST->getName());
+
         CtorMap[PT] = M.getOrInsertFunction("_ZN" + mangle + "C1Ev", FT);
         DtorMap[PT] = M.getOrInsertFunction("_ZN" + mangle + "D1Ev", FT);
         SizeMap[PT] =
             M.getOrInsertFunction("_ZNK" + mangle + "12ByteSizeLongEv", SizeFT);
+      } else if(Arch == Triple::x86_64){
+        std::string mangle = getWindowsMangleName(ST->getName());
+
+        
+        CtorMap[PT] = M.getOrInsertFunction("\01??0" + mangle + "@QEAA@XZ", FT);
+        DtorMap[PT] = M.getOrInsertFunction("\01??1" + mangle + "@UEAA@XZ", FT);  ////////
+        SizeMap[PT] = M.getOrInsertFunction(
+            "\01?ByteSizeLong@" + mangle + "@UEBA_KXZ", SizeFT);
+      } else {
+        std::string mangle = getWindowsMangleName(ST->getName());
+
+        CtorMap[PT] = M.getOrInsertFunction("\01??0" + mangle + "@QAE@XZ", FT);
+        DtorMap[PT] = M.getOrInsertFunction("\01??1" + mangle + "@UAE@XZ", FT);
+        SizeMap[PT] = M.getOrInsertFunction(
+            "\01?ByteSizeLong@" + mangle + "@UBEIXZ", SizeFT);
       }
-    }
+
+
   }
 }
 
-void InitMessageType(Module &M, bool isWindows) {
+void InitMessageType(Module &M, bool isWindows, Triple::ArchType Arch){
 
-  Types[MESSAGE] = findMessageType(M);
+  Types[MESSAGE] = findMessageLiteType(M);
 
   if (!Types[MESSAGE])
     return;
-  if (isWindows) {
-    ParseFunctions[MESSAGE] = getMessageLiteFunction(
-        M, "\01?ParseFromArray@MessageLite@protobuf@google@@QAE_NPBXH@Z");
-    SerialFunctions[MESSAGE] = getMessageLiteFunction(
-        M, "\01?SerializeToArray@MessageLite@protobuf@google@@QBE_NPAXH@Z");
-  } else {
+
+  if(!isWindows){
     ParseFunctions[MESSAGE] = getMessageLiteFunction(
         M, "_ZN6google8protobuf11MessageLite14ParseFromArrayEPKvi");
     SerialFunctions[MESSAGE] = getMessageLiteFunction(
         M, "_ZNK6google8protobuf11MessageLite16SerializeToArrayEPvi");
+  } else if(Arch == Triple::x86_64){
+
+    ParseFunctions[MESSAGE] = getMessageLiteFunction(
+        M, "\01?ParseFromArray@MessageLite@protobuf@google@@QEAA_NPEBXH@Z");
+    SerialFunctions[MESSAGE] = getMessageLiteFunction(
+        M, "\01?SerializeToArray@MessageLite@protobuf@google@@QEBA_NPEAXH@Z");
+  } else {
+
+    ParseFunctions[MESSAGE] = getMessageLiteFunction(
+        M, "\01?ParseFromArray@MessageLite@protobuf@google@@QAE_NPBXH@Z");
+    SerialFunctions[MESSAGE] = getMessageLiteFunction(
+        M, "\01?SerializeToArray@MessageLite@protobuf@google@@QBE_NPAXH@Z");
   }
 
-  InitCtorDtorSize(M, isWindows);
+  for (StructType *ST : M.getIdentifiedStructTypes())
+    if (isProtobufStruct(ST)) 
+      ProtobufStructs.insert(ST);
+
+  InitCtorDtorSize(M, isWindows, Arch);
 }
 
-void InitStringType(Module &M, bool isWindows) {
+void InitStringType(Module &M, bool isWindows, Triple::ArchType Arch){
   Types[STRING] = findStringType(M);
 
   if (!Types[STRING])
@@ -191,7 +246,45 @@ void InitStringType(Module &M, bool isWindows) {
   FunctionType *FT = FunctionType::get(Type::getVoidTy(M.getContext()),
                                        ArrayRef<Type *>(stringTypeStar), false);
 
-  if (isWindows) {
+
+  if(!isWindows){
+    ParseFunctions[STRING] = getReadWriteTypesFunction(
+        M, itaniumParseFunctionsName[STRING], stringTypeStar);
+
+    SerialFunctions[STRING] = getReadWriteTypesFunction(
+        M, itaniumSerialFunctionsName[STRING], stringTypeStar);
+
+    CtorMap[stringTypeStar] = M.getOrInsertFunction(
+        "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEC1Ev", FT);
+    DtorMap[stringTypeStar] = M.getOrInsertFunction(
+        "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev", FT);
+    SizeMap[stringTypeStar] = M.getOrInsertFunction(
+        "_ZNKSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEE6lengthEv",
+        FunctionType::get(Types[INT64], ArrayRef<Type *>(stringTypeStar),
+                          false));
+  } else if(Arch == Triple::x86_64){
+
+    ParseFunctions[STRING] = getReadWriteTypesFunction(
+        M, microsoftParseFunctionsName[STRING], stringTypeStar);
+
+    SerialFunctions[STRING] = getReadWriteTypesFunction(
+        M, microsoftSerialFunctionsName[STRING], stringTypeStar);
+
+    CtorMap[stringTypeStar] =
+        M.getOrInsertFunction("\01??0?$basic_string@DU?$char_traits@D@std@@V?$"
+                              "allocator@D@2@@std@@QEAA@XZ",
+                              FT);
+    DtorMap[stringTypeStar] =
+        M.getOrInsertFunction("\01??1?$basic_string@DU?$char_traits@D@std@@V?$"
+                              "allocator@D@2@@std@@QEAA@XZ",
+                              FT);
+    SizeMap[stringTypeStar] = M.getOrInsertFunction(
+        "\01?length@?$basic_string@DU?$char_traits@D@std@@V?$allocator@D@2@@"
+        "std@@QEBA_KXZ",
+        FunctionType::get(Types[INT64], ArrayRef<Type *>(stringTypeStar),
+                          false));
+  
+  } else {
 
     ParseFunctions[STRING] = getReadWriteTypesFunction(
         M, microsoftParseFunctionsName[STRING], stringTypeStar);
@@ -212,23 +305,10 @@ void InitStringType(Module &M, bool isWindows) {
         "std@@QBEIXZ",
         FunctionType::get(Types[INT64], ArrayRef<Type *>(stringTypeStar),
                           false));
-  } else {
-
-    ParseFunctions[STRING] = getReadWriteTypesFunction(
-        M, itaniumParseFunctionsName[STRING], stringTypeStar);
-
-    SerialFunctions[STRING] = getReadWriteTypesFunction(
-        M, itaniumSerialFunctionsName[STRING], stringTypeStar);
-
-    CtorMap[stringTypeStar] = M.getOrInsertFunction(
-        "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEC1Ev", FT);
-    DtorMap[stringTypeStar] = M.getOrInsertFunction(
-        "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev", FT);
-    SizeMap[stringTypeStar] = M.getOrInsertFunction(
-        "_ZNKSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEE6lengthEv",
-        FunctionType::get(Types[INT64], ArrayRef<Type *>(stringTypeStar),
-                          false));
   }
+
+
+
 }
 
 void InitTypes(llvm::Module &M, bool isWindows) {
@@ -269,9 +349,9 @@ bool Init(Module &M) {
 
   InitTypes(M, isWindows);
 
-  InitStringType(M, isWindows);
+  InitStringType(M, isWindows, Trip.getArch());
 
-  InitMessageType(M, isWindows);
+  InitMessageType(M, isWindows, Trip.getArch());
 
   MallocFunction = M.getOrInsertFunction(
       "malloc", FunctionType::get(i8star, ArrayRef<Type *>(i64), false));

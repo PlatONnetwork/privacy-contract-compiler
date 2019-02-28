@@ -294,6 +294,10 @@ RTDyldMemoryManager::getSymbolAddressInProcess(const std::string &Name) {
   
   printf("search symbol %s on self process.\n", NameStr);
   uint64_t SymAddr = (uint64_t)sys::DynamicLibrary::SearchForAddressOfSymbol(NameStr);
+#if LLVM_ON_WIN32
+  if (!SymAddr && Name[0] == '_')
+	  SymAddr = (uint64_t)sys::DynamicLibrary::SearchForAddressOfSymbol(Name.c_str());
+#endif
 
   // ------ Begin ------ Added by cyf 2018-12-25 -------
   // if we can't find the special symbol, mean the symbol maybe in
@@ -304,7 +308,11 @@ RTDyldMemoryManager::getSymbolAddressInProcess(const std::string &Name) {
   if (!SymAddr) {
 	  const char *RepNameStr = nullptr;
 	  if (!strcmp(NameStr, "??_7type_info@@6B@"))
-		  RepNameStr = "??8type_info@@QBEHABV0@@Z";
+#ifndef _WIN64
+		RepNameStr = "??8type_info@@QBEHABV0@@Z";
+#else
+		RepNameStr = "??8type_info@@QEBAHAEBV0@@Z";
+#endif
 	  if (!strcmp(NameStr, "_imp___CxxThrowException@8"))
 		  RepNameStr = "_CxxThrowException";
 	  if (!strcmp(NameStr, "_imp____std_terminate"))
