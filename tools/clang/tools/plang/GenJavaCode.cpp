@@ -1,6 +1,7 @@
 #include "llvm/IR/Function.h"
 #include "llvm/Support/MD5.h"
 #include "llvm/Support/raw_ostream.h"
+#include "llvm/Support/Path.h"
 
 #include "demangle/Demangle.h"
 #include "gencode.h"
@@ -68,7 +69,7 @@ void GenJavaCode(std::string &bc, vector<Function *> &Interfaces,
                  string InputFilename) {
 
   IR ir;
-  ir.name = InputFilename;
+  ir.name = llvm::sys::path::filename(InputFilename);
   ir.hash = getMD5(bc);
   //ir.pb_path = protobufJava[0];
   ir.java_files = protobufJava;

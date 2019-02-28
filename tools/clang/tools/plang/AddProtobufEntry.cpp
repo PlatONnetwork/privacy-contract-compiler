@@ -1,4 +1,5 @@
 
+#include <set>
 #include <vector>
 
 #include "clang/CodeGen/ModuleBuilder.h"
@@ -38,6 +39,7 @@ extern Type *Types[7];
 extern Constant *ParseFunctions[7];
 extern Constant *SerialFunctions[7];
 
+extern set<StructType*> ProtobufStructs;
 extern map<Type *, Constant *> CtorMap, DtorMap, SizeMap;
 
 bool Init(Module &M);
@@ -45,24 +47,18 @@ bool Init(Module &M);
 StringRef getSimpleName(StringRef);
 
 
-bool isProtobufStruct(Type *T) {
-
-  if (!T->isStructTy())
-    return false;
-
-  if (T->getStructNumElements() == 0)
-    return false;
-
-  bool eq = T->getStructElementType(0) == Types[MESSAGE];
-
-  return eq;
-}
-
 bool isBaseType(Type *T) { return T->isFloatingPointTy() || T->isIntegerTy(); }
+
+bool existProtobufStruct(Type* T){
+  if(StructType* ST = dyn_cast<StructType>(T))
+    return ProtobufStructs.find(ST)!=ProtobufStructs.end();
+  else
+    return false;
+}
 
 bool isBaseTypeOrProtobufPointer(Type *T) {
   return isBaseType(T) || (T == stringTypeStar) ||
-         (T->isPointerTy() && isProtobufStruct(T->getPointerElementType()));
+         (T->isPointerTy() && existProtobufStruct(T->getPointerElementType()));
 }
 
 bool isIdentName(StringRef Name){
@@ -76,25 +72,24 @@ bool isIdentName(StringRef Name){
 }
 
 bool isInterfact(Function &F) {
-
   bool Res = true;
 
-  Res &= !F.isDeclaration();
+  Res = !F.isDeclaration();
 
   FunctionType *FT = F.getFunctionType();
 
-  Res &= FT->getNumParams() >= (F.hasStructRetAttr() ? 3 : 2);
+  Res = Res && FT->getNumParams() >= (F.hasStructRetAttr() ? 3 : 2);
 
   Type *RetType =
       F.hasStructRetAttr() ? FT->getParamType(0) : FT->getReturnType();
 
-  Res &= isBaseTypeOrProtobufPointer(RetType);
+  Res = Res && isBaseTypeOrProtobufPointer(RetType);
 
   for (Type *T : FT->params()) {
-    Res &= isBaseTypeOrProtobufPointer(T);
+    Res = Res && isBaseTypeOrProtobufPointer(T);
   }
 
-  Res &= isIdentName(getSimpleName(F.getName()));
+  Res = Res && isIdentName(getSimpleName(F.getName()));
   return Res;
 }
 
@@ -106,8 +101,7 @@ Value *makeParseProtobuf(IRBuilder<> &Builder, Type *PT, Value *Argv,
 
   Builder.CreateCall(CtorMap[PT], ArrayRef<Value *>(msg), "");
 
-  Value *messageLite = Builder.CreateGEP(
-      msg, vector<Value *>(3, Builder.getInt32(0)), "messageLite");
+  Value* messageLite = Builder.CreateBitCast(msg, PointerType::getUnqual(Types[MESSAGE]), "messageLite");
 
   Value *indexGEP =
       Builder.CreateGEP(Argv, ArrayRef<Value *>(Builder.getInt32(i)));
@@ -207,8 +201,7 @@ Value *makeParseValue(IRBuilder<> &Builder, Type *T, Value *Argv,
 
 Value *makeSerialProtobuf(IRBuilder<> &Builder, Value *ret, Value *bufstar) {
 
-  Value *gep =
-      Builder.CreateGEP(ret, vector<Value *>(3, Builder.getInt32(0)), "");
+  Value* messageLite = Builder.CreateBitCast(ret, PointerType::getUnqual(Types[MESSAGE]), "messageLite");
 
   CallInst *size = Builder.CreateCall(SizeMap[ret->getType()],
                                       ArrayRef<Value *>(ret), "size");
@@ -219,7 +212,7 @@ Value *makeSerialProtobuf(IRBuilder<> &Builder, Value *ret, Value *bufstar) {
   Builder.CreateStore(mem, bufstar);
 
   vector<Value *> SerialArgs;
-  SerialArgs.push_back(gep);
+  SerialArgs.push_back(messageLite);
   SerialArgs.push_back(mem);
   SerialArgs.push_back(trunc);
 
@@ -353,7 +346,7 @@ Function *makeProtobufEntry(Function *F) {
     if (msg->getType()->isPointerTy()) {
       if (msg->getType() == stringTypeStar)
         Builder.CreateCall(DtorMap[stringTypeStar], ArrayRef<Value *>(msg));
-      else if (isProtobufStruct(msg->getType()->getPointerElementType()))
+      else if (existProtobufStruct(msg->getType()->getPointerElementType()))
         Builder.CreateCall(DtorMap[msg->getType()], ArrayRef<Value *>(msg), "");
     }
   }
